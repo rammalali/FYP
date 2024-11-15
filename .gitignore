@@ -1,5 +1,7 @@
-/dataset/*
+**/dataset/**
+app/db/*
 
+**certificate**
 
 __pycache__/
 *.py[cod]
