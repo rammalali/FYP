@@ -1,4 +1,8 @@
-# Byte-compiled / optimized / DLL files
+**/dataset/**
+app/db/*
+
+**certificate**
+
 __pycache__/
 *.py[cod]
 *$py.class
