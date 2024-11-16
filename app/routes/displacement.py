@@ -6,7 +6,7 @@ from PIL import Image
 import pickle
 
 # Load the pre-trained model
-with open('data/models/RandomForestRegressor.pkl', 'rb') as file:
+with open('models/v1/RandomForestRegressor.pkl', 'rb') as file:
     loaded_model = pickle.load(file)
 
 def predict_displacement(start_cycle, end_cycle, step_size, velocity):

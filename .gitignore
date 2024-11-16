@@ -1,6 +1,10 @@
 **/dataset/**
 app/db/*
 
+app/models/v1/RandomForestRegressor.pkl
+.vscode/launch.json
+
+
 **certificate**
 
 __pycache__/
