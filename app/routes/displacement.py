@@ -25,8 +25,8 @@ def elastic_displacement():
     st.write("Use the form below to predict displacement and view the results.")
 
     # Input fields
-    start_cycle = st.number_input("Start Cycle:", min_value=0, value=0, step=1)
-    end_cycle = st.number_input("End Cycle:", min_value=1, value=10, step=1)
+    start_cycle = st.number_input("Start Cycle:", min_value=0, value=0, step=50)
+    end_cycle = st.number_input("End Cycle:", min_value=100, value=150, step=50)
     step_size = st.number_input("Step Size:", min_value=1, value=1, step=1)
     velocity = st.selectbox("Velocity (km/h):", options=[160, 210, 270, 320])
 
