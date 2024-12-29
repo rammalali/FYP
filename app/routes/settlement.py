@@ -7,15 +7,12 @@ import pickle
 import streamlit as st
 
 class Settlement:
-    def __init__(self):
-        with open('models/v1/ps_rf_model.pkl', 'rb') as file:
-            loaded_model = pickle.load(file)
+    def __init__(self, loaded_model):
 
         self.loaded_model = loaded_model
 
     def set_loaded_model(self, loaded_model):
         self.loaded_model = loaded_model
-
     
     
 
@@ -23,14 +20,13 @@ class Settlement:
         cycle_numbers = list(range(start_cycle, end_cycle + 1, step_size))
         new_data = pd.DataFrame({
             'velocity': [velocity] * len(cycle_numbers),
-            'cycle_number': cycle_numbers
+            'Cycle_Number': cycle_numbers
         })
         predicted_settlement = self.loaded_model.predict(new_data)
         return cycle_numbers, predicted_settlement.tolist()
 
 
     def permanent_settlement(self):
-        st.title("Permanent Settlement")
         st.write("Use the form below to predict settlement and view the results.")
 
         # Input fields
@@ -44,20 +40,16 @@ class Settlement:
                 # Perform predictions
                 cycle_numbers, predicted_settlement = self._predict_settlement(start_cycle, end_cycle, step_size, velocity)
 
-                # Display results in a table
-                st.subheader("Predicted Settlement Table")
                 result_df = pd.DataFrame({
                     "Cycle Number": cycle_numbers,
                     "Predicted Settlement": [f"{value:.9f}" for value in predicted_settlement]
                 })
-                st.dataframe(result_df)
-
-                # Display results as a graph
-                st.subheader("Predicted Settlement Graph")
+                
                 graph_image = self.plot_settlement_high_res(start_cycle, end_cycle, step_size, velocity)
-                st.image(graph_image, caption="Predicted Settlement", use_container_width=True)
+                return graph_image, result_df
             else:
                 st.error("Start Cycle must be less than End Cycle.")
+        return None, None
 
     def plot_settlement_high_res(self, start_cycle, end_cycle, step_size, velocity):
         cycle_numbers, predicted_settlement = self._predict_settlement(start_cycle, end_cycle, step_size, velocity)
@@ -114,7 +106,7 @@ class Settlement:
             cycle_numbers = list(range(start_cycle, end_cycle + 1, step_size))
             new_data = pd.DataFrame({
                 'velocity': [velocity] * len(cycle_numbers),
-                'cycle_number': cycle_numbers
+                'Cycle_Number': cycle_numbers
             })
 
             # Predict settlement
@@ -149,13 +141,15 @@ class Settlement:
         return buf
 
     def settlement_multi_aligned(self, cell_style):
-        st.subheader("Settlement Multi-Aligned Prediction")
+        left, right = st.columns(2)
+        with left:
+            st.subheader("Settlement Prediction")
 
-        st.markdown(cell_style, unsafe_allow_html=True)
+            st.markdown(cell_style, unsafe_allow_html=True)
 
-        # User inputs for number of ranges and step size
-        num_ranges = st.number_input("Enter number of velocity ranges:", min_value=1, value=3, step=1)
-        step_size = st.number_input("Enter step size:", min_value=1, value=1000, step=1)
+            # User inputs for number of ranges and step size
+            num_ranges = st.number_input("Enter number of velocity ranges:", min_value=1, value=3, step=1)
+            step_size = st.number_input("Enter step size:", min_value=1, value=1000, step=1)
 
         velocity_options = [160, 210, 270, 320, 380]  # Predefined velocity options
 
@@ -217,9 +211,9 @@ class Settlement:
             combined_results = []
             for velocity, start_cycle, end_cycle in velocity_ranges:
                 cycle_numbers = list(range(start_cycle, end_cycle + 1, step_size))
-                new_data = pd.DataFrame({'velocity': [velocity] * len(cycle_numbers), 'cycle_number': cycle_numbers})
+                new_data = pd.DataFrame({'velocity': [velocity] * len(cycle_numbers), 'Cycle_Number': cycle_numbers})
                 predicted_settlement = self.loaded_model.predict(new_data)
-                combined_results.extend(zip(new_data['velocity'], new_data['cycle_number'], predicted_settlement))
+                combined_results.extend(zip(new_data['velocity'], new_data['Cycle_Number'], predicted_settlement))
 
-            result_df = pd.DataFrame(combined_results, columns=["velocity", "cycle_number", "smoothed_settlement"])
+            result_df = pd.DataFrame(combined_results, columns=["velocity", "Cycle_Number", "smoothed_settlement"])
             st.dataframe(result_df)

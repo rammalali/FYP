@@ -14,11 +14,11 @@ class Train:
         self.check_df_data()
 
     def check_df_data(self):
-        if all(col in self.df.columns for col in ['velocity', 'cycle_number']):
+        if all(col in self.df.columns for col in ['velocity', 'Cycle_Number']):
             if self.type == "Elastic Displacement":
-                return 'smoothed_displacement'.lower() in (col.lower() for col in self.df.columns)
+                return 'smoothed_displacement' in (col.lower() for col in self.df.columns)
             elif self.type == "Permanent Settlement":
-                return 'Smoothed_Settlement'.lower() in (col.lower() for col in self.df.columns)
+                return 'smoothed_settlement' in (col.lower() for col in self.df.columns)
             elif self.type == "Acceleration":
                 return all(
                     col.lower() in (c.lower() for c in self.df.columns)
@@ -46,7 +46,7 @@ class Train:
         
 
     def _train_displacement_model(self):
-        X = self.df[['velocity', 'cycle_number']]
+        X = self.df[['velocity', 'Cycle_Number']]
         y = self.df['smoothed_displacement']
 
 
@@ -88,7 +88,7 @@ class Train:
         return smoothed_displacement_rf_model, r2_test 
 
     def _train_settlement_model(self):
-        X = self.df[['velocity', 'cycle_number']]
+        X = self.df[['velocity', 'Cycle_Number']]
         y = self.df['smoothed_settlement']
 
         X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
@@ -103,9 +103,9 @@ class Train:
         model = RandomForestRegressor(random_state=42)
         param_grid = {
             'n_estimators': [50, 100, 150],
-            'max_depth': [3, 5, 10],
-            'min_samples_split': [2, 5, 10, 20],
-            'min_samples_leaf': [1, 4, 6, 8, 16],
+            'max_depth': [10, 12],
+            'min_samples_split': [20, 24],
+            'min_samples_leaf': [8, 16],
             'max_features': ['sqrt']
         }
 
@@ -130,7 +130,7 @@ class Train:
         return ps_rf_model, r2_test
     
     def _train_neg_acceleration_model(self):
-        X = self.df[['velocity', 'cycle_number']]
+        X = self.df[['velocity', 'Cycle_Number']]
         y_neg = self.df['smoothed_negative_max']
 
         # Splitting data into train/validation/test sets
@@ -175,7 +175,7 @@ class Train:
         return n_max_rf_model, r2_test
     
     def _train_pos_acceleration_model(self):
-        X = self.df[['velocity', 'cycle_number']]
+        X = self.df[['velocity', 'Cycle_Number']]
         y = self.df['smoothed_positive_max']
 
         X_train_val, X_test, y_train_val, y_test = train_test_split(X, y, test_size=0.2, random_state=42)

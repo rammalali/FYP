@@ -13,18 +13,13 @@ from sklearn.pipeline import Pipeline
 import numpy as np
 
 class Acceleration:
-    def __init__(self):
-        with open('models/v1/n_max_acc_rf_model.pkl', 'rb') as neg_file:
-            n_max_rf_model = pickle.load(neg_file)
-        with open('models/v1/p_max_acc_rf_model.pkl', 'rb') as pos_file:
-            p_max_rf_model = pickle.load(pos_file)
-
+    def __init__(self, n_max_rf_model, p_max_rf_model):
         self.n_max_rf_model = n_max_rf_model
         self.p_max_rf_model = p_max_rf_model
 
     def set_n_max_rf_model(self, n_max_rf_model):
         self.n_max_rf_model = n_max_rf_model
-    
+
     def set_p_max_rf_model(self, p_max_rf_model):
         self.p_max_rf_model = p_max_rf_model
 
@@ -35,7 +30,7 @@ class Acceleration:
         cycle_numbers = list(range(start_cycle, end_cycle + 1, step_size))
         new_data = pd.DataFrame({
             'velocity': [velocity] * len(cycle_numbers),
-            'cycle_number': cycle_numbers
+            'Cycle_Number': cycle_numbers
         })
         neg_model = self.n_max_rf_model
         pos_model = self.p_max_rf_model
@@ -64,8 +59,7 @@ class Acceleration:
 
     # Streamlit UI for Acceleration Predictions
     def acceleration_prediction(self):
-        st.title("Acceleration Prediction")
-        st.write("Use the inputs below to generate and compare acceleration predictions.")
+        st.write("Use the form below to predict acceleration and view the results.")
 
         # User inputs
         start_cycle = st.number_input("Start Cycle:", min_value=0, value=0, step=50)
@@ -77,16 +71,18 @@ class Acceleration:
         if st.button("Generate Predictions"):
             if start_cycle < end_cycle:
                 # Generate and display the plot
-                st.subheader("Acceleration Predictions")
                 plot_image = self.generate_and_plot_accelerations(
                     start_cycle=start_cycle,
                     end_cycle=end_cycle,
                     step_size=step_size,
                     velocity=velocity
                 )
+                return plot_image
                 st.image(plot_image, caption="Acceleration Predictions", use_container_width=True)
             else:
                 st.error("Start Cycle must be less than End Cycle.")
+        return None
+                
 
 
 
@@ -134,7 +130,7 @@ class Acceleration:
             cycle_numbers = list(range(start_cycle, end_cycle + 1, step_size))
             new_data = pd.DataFrame({
                 'velocity': [velocity] * len(cycle_numbers),
-                'cycle_number': cycle_numbers
+                'Cycle_Number': cycle_numbers
             })
 
             # Predict negative and positive max accelerations
@@ -183,13 +179,15 @@ class Acceleration:
 
 
     def acceleration_multi_aligned(self, cell_style):
-        st.subheader("Acceleration Multi-Aligned Prediction")
+        left, right = st.columns(2)
+        with left:
+            st.subheader("Acceleration Prediction")
 
-        st.markdown(cell_style, unsafe_allow_html=True)
+            st.markdown(cell_style, unsafe_allow_html=True)
 
-        # User inputs for number of ranges and step size
-        num_ranges = st.number_input("Enter number of velocity ranges:", min_value=1, value=3, step=1)
-        step_size = st.number_input("Enter step size:", min_value=1, value=1000, step=1)
+            # User inputs for number of ranges and step size
+            num_ranges = st.number_input("Enter number of velocity ranges:", min_value=1, value=3, step=1)
+            step_size = st.number_input("Enter step size:", min_value=1, value=1000, step=1)
 
         velocity_options = [160, 210, 270, 320, 380]  # Predefined velocity options
 
@@ -260,12 +258,12 @@ class Acceleration:
             combined_results = []
             for velocity, start_cycle, end_cycle in velocity_ranges:
                 cycle_numbers = list(range(start_cycle, end_cycle + 1, step_size))
-                new_data = pd.DataFrame({'velocity': [velocity] * len(cycle_numbers), 'cycle_number': cycle_numbers})
+                new_data = pd.DataFrame({'velocity': [velocity] * len(cycle_numbers), 'Cycle_Number': cycle_numbers})
                 predicted_pos_acceleration = self.p_max_rf_model.predict(new_data)
                 predicted_neg_acceleration = self.n_max_rf_model.predict(new_data)
-                combined_results.extend(zip(new_data['velocity'], new_data['cycle_number'], predicted_pos_acceleration, predicted_neg_acceleration))
+                combined_results.extend(zip(new_data['velocity'], new_data['Cycle_Number'], predicted_pos_acceleration, predicted_neg_acceleration))
 
-            result_df = pd.DataFrame(combined_results, columns=["Velocity (km/h)", "Cycle Number", "Smoothed Positive Max", "Smoothed Negative Max"])
+            result_df = pd.DataFrame(combined_results, columns=["velocity", "Cycle_Number", "smoothed_positive_max", "smoothed_negative_max"])
             st.dataframe(result_df)
 
 

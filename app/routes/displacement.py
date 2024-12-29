@@ -7,24 +7,23 @@ import pickle
 import streamlit as st
 
 class Displacement:
-    def __init__(self):
-        with open('models/v1/smoothed_displacement_rf_model.pkl', 'rb') as file:
-            loaded_model = pickle.load(file)
+    def __init__(self, loaded_model):
+        self.loaded_model = loaded_model
 
+    def set_loaded_model(self, loaded_model):
         self.loaded_model = loaded_model
 
     def _predict_displacement(self, start_cycle, end_cycle, step_size, velocity):
         cycle_numbers = list(range(start_cycle, end_cycle + 1, step_size))
         new_data = pd.DataFrame({
             'velocity': [velocity] * len(cycle_numbers),
-            'cycle_number': cycle_numbers
+            'Cycle_Number': cycle_numbers
         })
         predicted_displacement = self.loaded_model.predict(new_data)
         return cycle_numbers, predicted_displacement.tolist()
 
 
     def elastic_displacement(self):
-        st.title("Elastic Displacement")
         st.write("Use the form below to predict displacement and view the results.")
 
         # Input fields
@@ -38,20 +37,16 @@ class Displacement:
                 # Perform predictions
                 cycle_numbers, predicted_displacement = self._predict_displacement(start_cycle, end_cycle, step_size, velocity)
 
-                # Display results in a table
-                st.subheader("Predicted Displacement Table")
                 result_df = pd.DataFrame({
                     "Cycle Number": cycle_numbers,
                     "Predicted Displacement": [f"{value:.9f}" for value in predicted_displacement]
                 })
-                st.dataframe(result_df)
 
-                # Display results as a graph
-                st.subheader("Predicted Displacement Graph")
                 graph_image = self.plot_displacement_high_res(start_cycle, end_cycle, step_size, velocity)
-                st.image(graph_image, caption="Predicted Displacement", use_container_width=True)
+                return graph_image, result_df
             else:
                 st.error("Start Cycle must be less than End Cycle.")
+        return None, None
 
     def plot_displacement_high_res(self, start_cycle, end_cycle, step_size, velocity):
         cycle_numbers, predicted_displacement = self._predict_displacement(start_cycle, end_cycle, step_size, velocity)
@@ -99,7 +94,7 @@ class Displacement:
             cycle_numbers = list(range(start_cycle, end_cycle + 1, step_size))
             new_data = pd.DataFrame({
                 'velocity': [velocity] * len(cycle_numbers),
-                'cycle_number': cycle_numbers
+                'Cycle_Number': cycle_numbers
             })
 
             # Predict displacement
@@ -136,13 +131,15 @@ class Displacement:
 
 
     def displacement_multi_aligned(self, cell_style):
-        st.subheader("Displacement Multi-Aligned Prediction")
+        left, right = st.columns(2)
+        with left:
+            st.subheader("Displacement Prediction")
 
-        st.markdown(cell_style, unsafe_allow_html=True)
+            st.markdown(cell_style, unsafe_allow_html=True)
 
-        # User inputs for number of ranges and step size
-        num_ranges = st.number_input("Enter number of velocity ranges:", min_value=1, value=3, step=1)
-        step_size = st.number_input("Enter step size:", min_value=1, value=1000, step=1)
+            # User inputs for number of ranges and step size
+            num_ranges = st.number_input("Enter number of velocity ranges:", min_value=1, value=3, step=1)
+            step_size = st.number_input("Enter step size:", min_value=1, value=1000, step=1)
 
         velocity_options = [160, 210, 270, 320, 380]  # Predefined velocity options
 
@@ -205,9 +202,9 @@ class Displacement:
             combined_results = []
             for velocity, start_cycle, end_cycle in velocity_ranges:
                 cycle_numbers = list(range(start_cycle, end_cycle + 1, step_size))
-                new_data = pd.DataFrame({'velocity': [velocity] * len(cycle_numbers), 'cycle_number': cycle_numbers})
+                new_data = pd.DataFrame({'velocity': [velocity] * len(cycle_numbers), 'Cycle_Number': cycle_numbers})
                 predicted_displacement = self.loaded_model.predict(new_data)
-                combined_results.extend(zip(new_data['velocity'], new_data['cycle_number'], predicted_displacement))
+                combined_results.extend(zip(new_data['velocity'], new_data['Cycle_Number'], predicted_displacement))
 
-            result_df = pd.DataFrame(combined_results, columns=["Velocity (km/h)", "Cycle Number", "Smoothed Displacement"])
+            result_df = pd.DataFrame(combined_results, columns=["velocity", "Cycle_Number", "smoothed_displacement"])
             st.dataframe(result_df)
