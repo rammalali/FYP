@@ -115,7 +115,7 @@ class Displacement:
 
         # Plot settings
         plt.xlabel('Cycle Number')
-        plt.ylabel('Displacement (mm)')
+        plt.ylabel('Displacement (cm)')
         plt.title('Aligned Displacement Predictions')
         plt.grid(True)
         plt.legend()

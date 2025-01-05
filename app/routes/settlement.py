@@ -127,7 +127,7 @@ class Settlement:
 
         # Plot settings
         plt.xlabel('Cycle Number')
-        plt.ylabel('Settlement (mm)')
+        plt.ylabel('Settlement (cm)')
         plt.title('Aligned Settlement Predictions')
         plt.grid(True)
         plt.legend()
