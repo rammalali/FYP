@@ -1,132 +1,390 @@
-# app/app.py
-
 import streamlit as st
-import os, time
-from utils.database import create_usertable, add_user, username_exists
-from utils.authentication import hash_password, verify_password
-from streamlit_option_menu import option_menu  # Assuming you're using streamlit-option-menu
+from routes.displacement import Displacement
+from routes.settlement import Settlement
+from routes.acceleration import Acceleration
+from routes.train import Train
+import pandas as pd
+import pickle, psycopg2, tempfile, os
+from routes.signup import Signup
+from routes.login import Login
+from dotenv import load_dotenv
 
-# Apply custom CSS (optional)
-def local_css(file_name):
-    with open(file_name) as f:
-        st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+load_dotenv()
 
-css_file = os.path.join(os.path.dirname(__file__), '.', 'styles', 'styles.css')
-local_css(css_file)
+conn = psycopg2.connect(
+    host=os.getenv("DB_HOST"),
+    database=os.getenv("DB_NAME"),
+    port=os.getenv("DB_PORT"),
+    user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASSWORD")
+)
 
-# Initialize Database
-create_usertable()
+with open('models/v1/n_max_acc_rf_model.pkl', 'rb') as neg_file:
+    n_max_rf_model = pickle.load(neg_file)
+with open('models/v1/p_max_acc_rf_model.pkl', 'rb') as pos_file:
+    p_max_rf_model = pickle.load(pos_file)
 
-# Main application with session management and redirection
-def main():
-    st.title("Welcome to the Secure App")
+with open('models/v1/ps_rf_model.pkl', 'rb') as file:
+    ps_loaded_model = pickle.load(file)
 
-    # Initialize session state variables
-    if 'logged_in' not in st.session_state:
-        st.session_state['logged_in'] = False
-        st.session_state['username'] = ''
+with open('models/v1/smoothed_displacement_rf_model.pkl', 'rb') as file:
+    sd_loaded_model = pickle.load(file)
 
-    if 'choice' not in st.session_state:
-        st.session_state['choice'] = 'Home'  # Default page
 
-    # Define the menu items and icons
-    if st.session_state['logged_in']:
-        menu_items = ["Home", "Logout", "About"]
-        icons = ["house", "box-arrow-right", "info-circle"]
+acceleration = Acceleration(n_max_rf_model=n_max_rf_model, p_max_rf_model=p_max_rf_model)
+displacement = Displacement(loaded_model=sd_loaded_model)
+settlement = Settlement(loaded_model=ps_loaded_model)
+
+
+# CSS for cell styling
+cell_style = """
+    <style>
+    .cell-container {
+        background-color: #e6f7ff;
+        border: 1px solid #91d5ff;
+        padding: 15px;
+        margin: 10px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    </style>
+    """
+
+# # Main App Configuration
+# st.set_page_config(page_title="Railway Track Prediction", layout="wide")
+
+# # Sidebar Navigation
+# st.sidebar.title("Navigation")
+# nav_option = st.sidebar.radio("Choose Prediction Type:", ["Elastic Displacement", "Permanent Settlement", "Acceleration"])
+
+# tabs = st.tabs(["Login", "Sign up"])
+
+
+def check_model_features(model, feature_names):
+    """
+    Check if the model can accept the required features.
+    """
+    try:
+        # Create a dummy dataframe with the required features
+        test_df = pd.DataFrame({feature: [0] for feature in feature_names})
+        model.predict(test_df)
+        return True
+    except Exception:
+        return False
+    
+def upload_model(nav_option):
+    # Initialize state for multi-aligned prediction
+    if nav_option == "Acceleration":
+        st.session_state.is_acceleration = True
     else:
-        menu_items = ["Home", "Login", "Sign Up", "About"]
-        icons = ["house", "box-arrow-in-right", "person-plus", "info-circle"]
+        st.session_state.is_acceleration = False
 
-    # Create the navigation bar using session state
-    selected = option_menu(
-        menu_title='',  # Leave empty to remove the menu title
-        options=menu_items,
-        icons=icons,
-        menu_icon='cast',
-        default_index=menu_items.index(st.session_state['choice']),
-        orientation='horizontal',
-    )
+    # Display file upload options based on the state
+    if st.session_state.is_acceleration:
+        uploaded_file_n = st.file_uploader("Upload Negative Acceleration Model (.pkl):", type=["pkl"], key="model_n")
+        uploaded_file_p = st.file_uploader("Upload Positive Acceleration Model (.pkl):", type=["pkl"], key="model_p")
 
-    # Update the choice in session state
-    st.session_state['choice'] = selected
-    choice = st.session_state['choice']
+        if uploaded_file_n and uploaded_file_p:
+            try:
+                pretrained_model_n = pickle.load(uploaded_file_n)
+                pretrained_model_p = pickle.load(uploaded_file_p)
 
-    # Render the selected page
-    if choice == "Home":
-        st.subheader("Home")
-        if st.session_state['logged_in']:
-            st.write(f"Welcome back, **{st.session_state['username']}**!")
-            # Protected content can be added here
-        else:
-            st.write("Welcome to the secure application. Please navigate using the menu.")
-
-    elif choice == "Login":
-        if st.session_state['logged_in']:
-            st.success(f"You are already logged in as {st.session_state['username']}")
-            # Redirect to Home page
-            st.session_state['choice'] = "Home"
-            # st.rerun()
-        else:
-            st.subheader("Login")
-
-            username = st.text_input("Username")
-            password = st.text_input("Password", type='password')
-
-            if st.button("Login"):
-                if verify_password(username, password):
-                    st.success(f"Logged in as {username}")
-                    st.session_state['logged_in'] = True
-                    st.session_state['username'] = username
-                    # Redirect to Home page
-                    st.session_state['choice'] = "Home"
-                    st.rerun()
+                if not check_model_features(pretrained_model_n, ['velocity', 'Cycle_Number']) or \
+                   not check_model_features(pretrained_model_p, ['velocity', 'Cycle_Number']):
+                    st.error("One or both models do not support the required features: 'velocity' and 'Cycle_Number'.")
                 else:
-                    st.error("Invalid username or password")
+                    st.success("Both models uploaded successfully and verified!")
+                    acceleration.set_n_max_rf_model(pretrained_model_n)
+                    acceleration.set_p_max_rf_model(pretrained_model_p)
+                    acceleration.acceleration_multi_aligned(cell_style)
+            except Exception as e:
+                st.error(f"Failed to load the models. Error: {e}")
+    else:
+        uploaded_file = st.file_uploader("Upload your pretrained model (.pkl):", type=["pkl"], key="model")
 
-    elif choice == "Sign Up":
-        if st.session_state['logged_in']:
-            st.warning("You are already logged in. Please log out to create a new account.")
-            # Redirect to Home page
-            st.session_state['choice'] = "Home"
-            st.rerun()
-        else:
-            st.subheader("Create a New Account")
-
-            new_username = st.text_input("New Username")
-            new_password = st.text_input("New Password", type='password')
-
-            if st.button("Sign Up"):
-                if username_exists(new_username):
-                    st.warning("Username already exists. Please choose another.")
+        if uploaded_file:
+            try:
+                pretrained_model = pickle.load(uploaded_file)
+                if not check_model_features(pretrained_model, ['velocity', 'Cycle_Number']):
+                    st.error("The uploaded model does not support the required features: 'velocity' and 'Cycle_Number'.")
                 else:
-                    if new_username and new_password:
-                        hashed_pwd = hash_password(new_password)
-                        add_user(new_username, hashed_pwd)
-                        st.success("Account created successfully!")
-                        time.sleep(2)
-                        st.session_state['choice'] = "Login"
-                        st.rerun()
+                    st.success("Model uploaded successfully and verified!")
+                    # Pass the model to the appropriate handler
+            except Exception as e:
+                st.error(f"Failed to load the model. Error: {e}")
+
+# Main App Configuration
+st.set_page_config(page_title="Railway Track Prediction", layout="wide")
+
+# Initialize session state
+if "logged_in" not in st.session_state:
+    st.session_state["logged_in"] = False
+
+signup = Signup(conn)
+login = Login(conn)
+signup.create_user_table()
+
+
+if not st.session_state["logged_in"]:
+    auth_tabs = st.tabs(["Login", "Sign Up"])
+    with auth_tabs[0]:
+        login.login()
+    with auth_tabs[1]:
+        signup.signup()
+else:
+    st.sidebar.title("Navigation")
+    st.sidebar.write(f"Welcome, {st.session_state['username']}!")
+
+    nav_option = st.sidebar.radio("Choose Prediction Type:", ["Elastic Displacement", "Permanent Settlement", "Acceleration"])
+
+    if st.sidebar.button("Logout"):
+        st.session_state["logged_in"] = False
+        st.session_state["username"] = None
+        st.rerun()
+
+    # Header Tabs
+    tabs = st.tabs(["Predict", "Predict Multi-Aligned", "Train New Model"])
+
+    # Predict Section
+    with tabs[0]:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.title("Predict")
+
+        pretrained_model = None
+        pretrained_model_n = None
+        pretrained_model_p = None
+
+        with col2:
+            if nav_option == "Acceleration":
+                st.session_state.is_acceleration = True
+            else:
+                st.session_state.is_acceleration = False
+
+            # Display file upload options based on the state
+            if st.session_state.is_acceleration:
+                uploaded_file_n = st.file_uploader("Upload Negative Acceleration Model (.pkl):", type=["pkl"], key="model_n")
+                uploaded_file_p = st.file_uploader("Upload Positive Acceleration Model (.pkl):", type=["pkl"], key="model_p")
+
+                if uploaded_file_n and uploaded_file_p:
+                    try:
+                        pretrained_model_n = pickle.load(uploaded_file_n)
+                        pretrained_model_p = pickle.load(uploaded_file_p)
+
+                        if not check_model_features(pretrained_model_n, ['velocity', 'Cycle_Number']) or \
+                        not check_model_features(pretrained_model_p, ['velocity', 'Cycle_Number']):
+                            st.error("One or both models do not support the required features: 'velocity' and 'Cycle_Number'.")
+                        else:
+                            st.success("Both models uploaded successfully and verified!")
+
+                    except Exception as e:
+                        st.error(f"Failed to load the models. Error: {e}")
+            else:
+                uploaded_file = st.file_uploader("Upload your pretrained model (.pkl):", type=["pkl"])
+                if uploaded_file:
+                    try:
+                        pretrained_model = pickle.load(uploaded_file)
+                        if not check_model_features(pretrained_model, ['velocity', 'Cycle_Number']):
+                            st.error("The uploaded model does not support the required features: 'velocity' and 'Cycle_Number'.")
+                            pretrained_model = None
+                        else:
+                            st.success("Model uploaded successfully and verified!")
+                    except Exception as e:
+                        st.error(f"Failed to load the model. Error: {e}")
+                        pretrained_model = None
+
+        with col1:
+            if nav_option == "Elastic Displacement":
+                st.subheader("Elastic Displacement")
+                print(pretrained_model)
+                model = pretrained_model if pretrained_model else displacement.loaded_model
+                displacement.set_loaded_model(model)
+                plot_image, res_table = displacement.elastic_displacement()
+                if plot_image:
+                    with col1:
+                        st.subheader("Predicted Displacement Table")
+                        st.dataframe(res_table)
+                    with col2:
+                        st.subheader("Predicted Displacement Graph")
+                        st.image(plot_image, caption="Predicted Displacement", use_container_width=True)
+
+            elif nav_option == "Permanent Settlement":
+                st.subheader("Permanent Settlement")
+                model = pretrained_model if pretrained_model else settlement.loaded_model
+                settlement.set_loaded_model(model)
+                plot_image, res_table = settlement.permanent_settlement()
+                if plot_image:
+                    with col1:
+                        st.subheader("Predicted Settlement Table")
+                        st.dataframe(res_table)
+                    with col2:
+                        st.subheader("Predicted Settlement Graph")
+                        st.image(plot_image, caption="Predicted Settlement", use_container_width=True)
+
+            elif nav_option == "Acceleration":
+                st.subheader("Acceleration")
+                print(pretrained_model_n, pretrained_model_p)
+
+                n_model = pretrained_model_n if pretrained_model_n else acceleration.n_max_rf_model
+                p_model = pretrained_model_p if pretrained_model_p else acceleration.p_max_rf_model
+                acceleration.set_n_max_rf_model(n_model)
+                acceleration.set_p_max_rf_model(p_model)
+
+                plot_image = acceleration.acceleration_prediction()
+                if plot_image:
+
+                    with col2:
+                        st.subheader("Acceleration Predictions")
+                        st.image(plot_image, caption="Acceleration Prediction", use_container_width=True)
+
+    st.session_state.is_acceleration = False
+    with tabs[1]:
+        left, right = st.columns(2)
+        st.write("Upload models and perform predictions for multiple aligned data.")
+
+        # Initialize state for multi-aligned prediction
+        if nav_option == "Acceleration":
+            st.session_state.is_acceleration = True
+        else:
+            st.session_state.is_acceleration = False
+
+        # Display file upload options based on the state
+        if st.session_state.is_acceleration:
+            uploaded_file_n = st.file_uploader("Upload Negative Acceleration Model (.pkl):", type=["pkl"], key="multi_n")
+            uploaded_file_p = st.file_uploader("Upload Positive Acceleration Model (.pkl):", type=["pkl"], key="multi_p")
+
+            if uploaded_file_n and uploaded_file_p:
+                try:
+                    pretrained_model_n = pickle.load(uploaded_file_n)
+                    pretrained_model_p = pickle.load(uploaded_file_p)
+
+                    if not check_model_features(pretrained_model_n, ['velocity', 'Cycle_Number']) or \
+                    not check_model_features(pretrained_model_p, ['velocity', 'Cycle_Number']):
+                        st.error("One or both models do not support the required features: 'velocity' and 'Cycle_Number'.")
                     else:
-                        st.error("Please enter a valid username and password.")
+                        st.success("Both models uploaded successfully and verified!")
 
-    elif choice == "Logout":
-        if st.session_state['logged_in']:
-            st.session_state['logged_in'] = False
-            st.session_state['username'] = ''
-            st.success("You have been logged out.")
-            # Redirect to Home page
-            st.session_state['choice'] = "Login"
-            # st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to load the models. Error: {e}")
         else:
-            st.warning("You are not logged in.")
-            # Redirect to Home page
-            st.session_state['choice'] = "Login"
-            st.rerun()
+            uploaded_file = st.file_uploader("Upload your pretrained model (.pkl):", type=["pkl"], key="multi")
 
-    elif choice == "About":
-        st.subheader("About")
-        st.write("This is a secure application built with Streamlit.")
-        st.write("It demonstrates user authentication with session management.")
+            if uploaded_file:
+                try:
+                    pretrained_model = pickle.load(uploaded_file)
+                    if not check_model_features(pretrained_model, ['velocity', 'Cycle_Number']):
+                        st.error("The uploaded model does not support the required features: 'velocity' and 'Cycle_Number'.")
+                    else:
+                        st.success("Model uploaded successfully and verified!")
+                        # Pass the model to the appropriate handler
+                except Exception as e:
+                    st.error(f"Failed to load the model. Error: {e}")
 
-if __name__ == '__main__':
-    main()
+        with left:
+            st.title("Predict Multi-Aligned")
+
+
+
+        if nav_option == "Elastic Displacement":
+            model = pretrained_model if pretrained_model else displacement.loaded_model
+            displacement.set_loaded_model(model)
+            displacement.displacement_multi_aligned(cell_style)
+        elif nav_option == "Permanent Settlement":
+            model = pretrained_model if pretrained_model else settlement.loaded_model
+            settlement.set_loaded_model(model)
+            settlement.settlement_multi_aligned(cell_style)
+        if nav_option == "Acceleration":
+            n_model = pretrained_model_n if pretrained_model_n else acceleration.n_max_rf_model
+            p_model = pretrained_model_p if pretrained_model_p else acceleration.p_max_rf_model
+            acceleration.set_n_max_rf_model(n_model)
+            acceleration.set_p_max_rf_model(p_model)
+
+            acceleration.acceleration_multi_aligned(cell_style)
+
+    # Train New Model Section
+    with tabs[2]:
+        training_complete = False
+        st.title("Train New Model")
+        st.write("Upload your dataset to retrain the models.")
+
+        # Initialize session state variables
+        if "trained_model" not in st.session_state:
+            st.session_state.trained_model = None
+        if "training_complete" not in st.session_state:
+            st.session_state.training_complete = False
+
+        left, right = st.columns(2)
+        train_instance = None
+
+        with right:
+            # File upload for new training data
+            uploaded_file = st.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx", "xls"])
+            if uploaded_file:
+                st.write("File uploaded successfully!")
+                st.write(nav_option)
+                # Determine the file type and load the data
+                try:
+                    if uploaded_file.name.endswith(".csv"):
+                        data = pd.read_csv(uploaded_file)
+                    elif uploaded_file.name.endswith(('.xlsx', '.xls')):
+                        data = pd.read_excel(uploaded_file)
+                    else:
+                        st.error("Unsupported file format. Please upload a CSV or Excel file.")
+                        st.stop()   
+
+                    # Initialize Train class
+                    train_instance = Train(data, nav_option)
+                except Exception as e:
+                    st.error(f"An error occurred while processing the file: {e}")
+
+        with left:
+
+            if train_instance:
+                st.dataframe(data)
+
+
+        col1, col2 = st.columns(2)
+        if train_instance:
+            if train_instance.check_df_data():
+                st.success(f"Data validation passed for {nav_option} Model. Ready to train.")
+        
+            if train_instance.check_df_data():
+                # # Conditional training based on the sidebar selection
+                # train_btn = st.button(f"Train {nav_option} Model")
+                with col1:
+                    train_btn = st.button(f"Train {nav_option} Model")
+                    if train_btn:
+                        with st.spinner(f"Training {nav_option} Model. Please wait..."):
+                            trained_model, test_score = train_instance.train_model()
+                            st.session_state.trained_model = trained_model
+                            st.session_state.training_complete = True
+
+                
+                with col2:
+                    if train_btn:
+                        st.success(f"{nav_option} Model training completed.")
+
+                        # Display test score in two columns
+                        col1, col2 = st.columns(2)  
+                        st.metric(label="Test Score", value=f"{test_score:.4f}")
+
+            else:
+                st.error("The uploaded data does not meet the requirements for the selected model type.")
+
+
+            # Display save button only if training is complete
+            if st.session_state.training_complete and st.session_state.trained_model:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as tmp_file:
+                    pickle.dump(st.session_state.trained_model, tmp_file)
+                    tmp_file_path = tmp_file.name
+
+                with open(tmp_file_path, "rb") as file:
+                    st.download_button(
+                        label="Download Trained Model",
+                        data=file,
+                        file_name=f"{nav_option.replace(' ', '_').lower()}_trained_model.pkl",
+                        mime="application/octet-stream"
+                    )
