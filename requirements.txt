@@ -1,4 +1,0 @@
-streamlit
-streamlit-navigation-bar
-bcrypt
-db-sqlite3

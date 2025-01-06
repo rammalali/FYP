@@ -1,0 +1,12 @@
+streamlit
+streamlit-navigation-bar
+bcrypt
+db-sqlite3
+psycopg2-binary
+python-dotenv
+pillow
+matplotlib
+scikit-learn
+uuid
+pandas
+numpy
